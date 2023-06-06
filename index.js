@@ -1,58 +1,106 @@
 const fs = require('fs');
 
-function converterParaBinario(caractere) {
-  const binario = caractere.charCodeAt(0).toString(2).padStart(8, '0');
-  return binario;
+function charToBinary(char) {
+    return char.charCodeAt(0).toString(2).padStart(8, '0');
 }
 
-function calcularBitParidade(binario) {
-  let count = 0;
-  for (let i = 0; i < binario.length; i++) {
-    if (binario[i] === '1') {
-      count++;
+function calculateParityBit(binary) {
+    const count = binary.split('1').length - 1;
+
+    return count % 2 !== 0 ? '1' : '0';
+}
+
+function save(data) {
+    const filename = 'paridade.json';
+    const fileStream = fs.createWriteStream(filename);
+
+    fileStream.write(JSON.stringify(data));
+
+    fileStream.end();
+
+    readline.close();
+}
+
+const readline = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+let word = '';
+
+readline.question('Digite uma palavra: ', (inputWord) => {
+    word = inputWord;
+
+    const data = [];
+
+    for (let i = 0; i < word.length; i++) {
+        const char = word.charAt(i);
+        const binary = charToBinary(char);
+
+        data.push({
+            char: char,
+            char_ascii: char.charCodeAt(0),
+            binary: binary,
+            parityBit: calculateParityBit(binary)
+        });
     }
-  }
-  return count % 2 === 0 ? '0' : '1';
-}
 
-function gerarArquivoParidade(palavra) {
-  let conteudoArquivo = '';
+    readline.question('Deseja editar algum bit? (S/N): ', (choice) => {
+        if (choice.toUpperCase() === 'S') {
+            readline.question('Digite a posição do bit a ser editado: ', (position) => {
+                position = parseInt(position);
 
-  for (let i = 0; i < palavra.length; i++) {
-    const caractere = palavra[i];
-    const binario = converterParaBinario(caractere);
-    const bitParidade = calcularBitParidade(binario);
-    conteudoArquivo += `${caractere}: ${binario} ${bitParidade}\n`;
-  }
+                if (!isNaN(position) && position >= 0 && position < word.length) {
+                    const binary = data[position].binary;
 
-  fs.writeFileSync('arquivo_paridade.txt', conteudoArquivo, 'utf8');
-}
+                    data[position].binary = binary.substr(0, position) + (binary.charAt(position) === '1' ? '0' : '1') + binary.substr(position + 1);
+                    data[position].parityBit = Math.floor(Math.random() * 2).toString();
 
-function simularErroTransmissao() {
-  const conteudoArquivo = fs.readFileSync('arquivo_paridade.txt', 'utf8');
-  let novoConteudoArquivo = '';
+                    save(data);
+                } else {
+                    console.log('Posição inválida.');
+                }
+            });
+        } else {
+            save(data);
+        }
+    });
+});
 
-  for (let i = 0; i < conteudoArquivo.length; i++) {
-    if (Math.random() < 0.1) {
-      const caractereAtual = conteudoArquivo[i];
-      if (caractereAtual === '0') {
-        novoConteudoArquivo += '1';
-      } else if (caractereAtual === '1') {
-        novoConteudoArquivo += '0';
-      } else {
-        novoConteudoArquivo += caractereAtual;
-      }
-    } else {
-      novoConteudoArquivo += conteudoArquivo[i];
-    }
-  }
 
-  fs.writeFileSync('arquivo_erro.txt', novoConteudoArquivo, 'utf8');
-}
 
-const palavra = 'Olá';
-gerarArquivoParidade(palavra);
-console.log('Arquivo de paridade gerado com sucesso.');
+readline.on('close', () => {
+    fs.readFile( 'paridade.json', (err, content) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
 
-simularErroTransmissao();
-console.log('Arquivo com erro de transmissão gerado com sucesso.');
+        const data = JSON.parse(content);
+
+        console.log('Arquivo de paridade:');
+        console.log(data);
+
+        let errorDetected = false;
+
+        for (let i = 0; i < data.length; i++) {
+            const correctBinary = charToBinary(data[i].char);
+            const correctParityBit = calculateParityBit(correctBinary);
+
+            if (
+                data[i].binary !== correctBinary
+                    || data[i].parityBit !== correctParityBit
+            ) {
+                console.log(`Erro detectado na posição ${i} (${data[i].char}). Binário deve ser ${correctBinary} e bit de paridade ${correctParityBit}`);
+                errorDetected = true;
+            }
+        }
+
+        if (!errorDetected) {
+            console.log('Nenhum erro detectado na transmissão.');
+        }
+    });
+});
+
+
+
