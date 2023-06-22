@@ -1,106 +1,100 @@
-const fs = require('fs');
+const CRC_POLYNOMIAL_16 = 0x8005; // CRC-16 polynomial
+const INITIAL_CRC_VALUE_16 = 0xffff; // Initial CRC value for CRC-16
+const CRC_MASK_16 = 0xffff; // Mask the CRC value to 16 bits
 
-function charToBinary(char) {
-    return char.charCodeAt(0).toString(2).padStart(8, '0');
+const CRC_POLYNOMIAL_32 = 0x04c11db7; // CRC-32 polynomial
+const INITIAL_CRC_VALUE_32 = 0xffffffff; // Initial CRC value for CRC-32
+const CRC_MASK_32 = 0xffffffff; // Mask the CRC value to 32 bits
+
+function generateCRC16(inputData) {
+  let crc = INITIAL_CRC_VALUE_16;
+
+  for (let i = 0; i < inputData.length; i++) {
+    crc ^= (inputData.charCodeAt(i) << 8) & CRC_MASK_16; // XOR with next byte
+
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = (crc << 1) ^ CRC_POLYNOMIAL_16;
+      } else {
+        crc = crc << 1;
+      }
+    }
+  }
+
+  crc = crc & CRC_MASK_16;
+  return crc.toString(16).toUpperCase();
 }
 
-function calculateParityBit(binary) {
-    const count = binary.split('1').length - 1;
+function generateCRC32(inputData) {
+  let crc = INITIAL_CRC_VALUE_32;
 
-    return count % 2 !== 0 ? '1' : '0';
+  for (let i = 0; i < inputData.length; i++) {
+    crc ^= (inputData.charCodeAt(i) << 24) & CRC_MASK_32; // XOR with next byte
+
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x80000000) !== 0) {
+        crc = (crc << 1) ^ CRC_POLYNOMIAL_32;
+      } else {
+        crc = crc << 1;
+      }
+    }
+  }
+
+  crc = crc & CRC_MASK_32;
+  return crc.toString(16).toUpperCase();
 }
 
-function save(data) {
-    const filename = 'paridade.json';
-    const fileStream = fs.createWriteStream(filename);
+function verifyCRC16(inputData, receivedCRC) {
+  const calculatedCRC = generateCRC16(inputData);
+  return calculatedCRC === receivedCRC;
+}
 
-    fileStream.write(JSON.stringify(data));
-
-    fileStream.end();
-
-    readline.close();
+function verifyCRC32(inputData, receivedCRC) {
+  const calculatedCRC = generateCRC32(inputData);
+  return calculatedCRC === receivedCRC;
 }
 
 const readline = require('readline').createInterface({
-    input: process.stdin,
-    output: process.stdout
+  input: process.stdin,
+  output: process.stdout,
 });
 
-let word = '';
+readline.question('Digite uma palavra: ', (inputData) => {
+  if (!isASCII(inputData)) {
+    console.log('Erro: A entrada deve conter apenas caracteres ASCII.');
+    readline.close();
+    return;
+  }
 
-readline.question('Digite uma palavra: ', (inputWord) => {
-    word = inputWord;
+  const crc16 = generateCRC16(inputData);
+  console.log(`CRC-16 gerado: ${crc16}`);
 
-    const data = [];
+  const crc32 = generateCRC32(inputData);
+  console.log(`CRC-32 gerado: ${crc32}`);
 
-    for (let i = 0; i < word.length; i++) {
-        const char = word.charAt(i);
-        const binary = charToBinary(char);
+  readline.question('Digite o CRC-16 recebido: ', (receivedCRC16) => {
+    const isDataValid16 = verifyCRC16(inputData, receivedCRC16);
 
-        data.push({
-            char: char,
-            char_ascii: char.charCodeAt(0),
-            binary: binary,
-            parityBit: calculateParityBit(binary)
-        });
-    }
+    readline.question('Digite o CRC-32 recebido: ', (receivedCRC32) => {
+      const isDataValid32 = verifyCRC32(inputData, receivedCRC32);
 
-    readline.question('Deseja editar algum bit? (S/N): ', (choice) => {
-        if (choice.toUpperCase() === 'S') {
-            readline.question('Digite a posição do bit a ser editado: ', (position) => {
-                position = parseInt(position);
+      if (isDataValid16) {
+        console.log('O CRC-16 recebido está correto.');
+      } else {
+        console.log('Erro detectado no CRC-16 recebido.');
+      }
 
-                if (!isNaN(position) && position >= 0 && position < word.length) {
-                    const binary = data[position].binary;
+      if (isDataValid32) {
+        console.log('O CRC-32 recebido está correto.');
+      } else {
+        console.log('Erro detectado no CRC-32 recebido.');
+      }
 
-                    data[position].binary = binary.substr(0, position) + (binary.charAt(position) === '1' ? '0' : '1') + binary.substr(position + 1);
-                    data[position].parityBit = Math.floor(Math.random() * 2).toString();
-
-                    save(data);
-                } else {
-                    console.log('Posição inválida.');
-                }
-            });
-        } else {
-            save(data);
-        }
+      readline.close();
     });
+  });
 });
 
-
-
-readline.on('close', () => {
-    fs.readFile( 'paridade.json', (err, content) => {
-        if (err) {
-            console.error(err);
-            return;
-        }
-
-        const data = JSON.parse(content);
-
-        console.log('Arquivo de paridade:');
-        console.log(data);
-
-        let errorDetected = false;
-
-        for (let i = 0; i < data.length; i++) {
-            const correctBinary = charToBinary(data[i].char);
-            const correctParityBit = calculateParityBit(correctBinary);
-
-            if (
-                data[i].binary !== correctBinary
-                    || data[i].parityBit !== correctParityBit
-            ) {
-                console.log(`Erro detectado na posição ${i} (${data[i].char}). Binário deve ser ${correctBinary} e bit de paridade ${correctParityBit}`);
-                errorDetected = true;
-            }
-        }
-
-        if (!errorDetected) {
-            console.log('Nenhum erro detectado na transmissão.');
-        }
-    });
-});
-
-
-
+function isASCII(str) {
+  return /^[\x00-\x7F]*$/.test(str);
+}
